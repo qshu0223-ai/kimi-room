@@ -213,6 +213,29 @@ a {
   }
 }
 
+/* ── The keyboard follows the system's light or dark ───────────────
+   A WKWebView keyboard reads the used color-scheme of the focused element
+   rather than the system setting itself; with the site never declaring one,
+   WebKit treats it as light-only and a reader in dark mode still gets a pale
+   keyboard. Declared only on the inputs that raise a keyboard, never on :root:
+   the site's own day and night is a separate, deliberate switch, and the UA
+   rendering of the other form controls (range, date, file) must not be pulled
+   around by the system either. These inputs all carry explicit background,
+   colour and placeholder colours, so this changes the keyboard and nothing
+   visible. */
+textarea,
+[contenteditable]:not([contenteditable="false"]),
+input:where(:not([type]), [type="text"], [type="search"], [type="email"], [type="url"], [type="password"], [type="tel"], [type="number"]) {
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  textarea,
+  [contenteditable]:not([contenteditable="false"]),
+  input:where(:not([type]), [type="text"], [type="search"], [type="email"], [type="url"], [type="password"], [type="tel"], [type="number"]) {
+    color-scheme: dark;
+  }
+}
+
 /* ── Foyer (the front door, /) ─────────────────────────────────────
    Drawn against 402×874. At that width the stage is 1:1; narrower screens get
    it at a fixed width, centred. The foyer is one screen and does not scroll. */

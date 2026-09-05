@@ -106,15 +106,21 @@ import {
 // Grow a textarea to fit its content, between one line and maxPx px. Height is
 // zeroed before reading scrollHeight — "auto" leaves the element at its current
 // size in a flex row, so the measurement would only ever ratchet upward.
-function useAutoResize(value: string, minPx = 20, maxPx = 160) {
+//
+// The composer is uncontrolled (see `hasDraft` below), so this is driven by the
+// caller on input rather than by a rendered value.
+function useAutoResize(minPx = 20, maxPx = 160) {
   const ref = useRef<HTMLTextAreaElement>(null);
-  useLayoutEffect(() => {
+  const resize = useCallback(() => {
     const el = ref.current;
     if (!el) return;
     el.style.height = "0px";
     el.style.height = `${Math.min(Math.max(el.scrollHeight, minPx), maxPx)}px`;
-  }, [value, minPx, maxPx]);
-  return ref;
+  }, [minPx, maxPx]);
+  // Once on mount, so the empty composer starts at its one-line height rather
+  // than at whatever the element would be without an inline height.
+  useLayoutEffect(resize, [resize]);
+  return [ref, resize] as const;
 }
 
 // ============================================
@@ -342,7 +348,10 @@ function autoTheme(): ChatTheme {
  * reaches the next blank line.
  */
 function splitParagraphs(text: string): string[] {
-  const parts = text.split(/\n{2,}/).map((t) => t.trim()).filter(Boolean);
+  // A rule on its own line — models like it as a separator — counts as a break
+  // and is not shown: a horizontal line has no business surfacing in a bubble.
+  const cut = text.replace(/^[ \t]*(?:-{3,}|\*{3,}|_{3,})[ \t]*$/gm, "\n");
+  const parts = cut.split(/\n{2,}/).map((t) => t.trim()).filter(Boolean);
   return parts.length ? parts : [text];
 }
 
@@ -391,6 +400,8 @@ export function ChatRoom() {
   const [bgId, setBgId] = useState<string>("none");
   const [bgFit, setBgFit] = useState<BgFit>("adapt");
   const [bgSlots, setBgSlots] = useState<BackgroundSlot[]>(blankBackgroundSlots);
+  /** Which background slot is having its name edited, in place. */
+  const [renamingSlot, setRenamingSlot] = useState<number | null>(null);
   const [sendKey, setSendKey] = useState<SendKeySettings>(SEND_KEY_DEFAULTS);
   /** Object URL for a custom send key, resolved from IndexedDB like the background. */
   const [sendKeyUrl, setSendKeyUrl] = useState<string | null>(null);
@@ -416,8 +427,24 @@ export function ChatRoom() {
     msgs: [],
   }));
   const searchParams = useSearchParams();
-  const [draft, setDraft] = useState("");
-  const draftRef = useAutoResize(draft);
+  // The composer is uncontrolled. Holding what is being typed in React state
+  // re-rendered this whole component — three thousand lines of chat, every
+  // message, every panel — on each keystroke. The text lives in the DOM node;
+  // only "is there anything in it" is state, and that flips twice a message
+  // rather than once a character.
+  const [draftRef, resizeDraft] = useAutoResize();
+  const [hasDraft, setHasDraft] = useState(false);
+
+  /** Write the composer's text, from code rather than from typing. */
+  const setDraftText = useCallback(
+    (value: string) => {
+      const el = draftRef.current;
+      if (el) el.value = value;
+      resizeDraft();
+      setHasDraft(value.trim().length > 0);
+    },
+    [draftRef, resizeDraft],
+  );
   const [busy, setBusy] = useState(false);
   const [uploading, setUploading] = useState<number | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -714,6 +741,9 @@ export function ChatRoom() {
     }
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+      // Anything dragged sideways before that axis was closed stays where it
+      // was left; this pulls it back.
+      if (scrollRef.current.scrollLeft !== 0) scrollRef.current.scrollLeft = 0;
     }
   }, [session]);
 
@@ -1045,7 +1075,7 @@ export function ChatRoom() {
   }
 
   async function send() {
-    const text = draft.trim();
+    const text = (draftRef.current?.value ?? "").trim();
     if (!text || busy) return;
     const linkUrl = detectLink(text);
     const userMsg: ChatMessage = {
@@ -1063,7 +1093,7 @@ export function ChatRoom() {
       ts: new Date().toISOString(),
     };
     setSession((s) => ({ ...s, msgs: [...nextMsgs, replyMsg] }));
-    setDraft("");
+    setDraftText("");
     setBusy(true);
 
     // Scraped once, used twice: the card is drawn for her, and the title also
@@ -1146,12 +1176,18 @@ export function ChatRoom() {
     }
   }
 
+  /** Open the name for editing in place. window.prompt used to do this, but a
+   *  PWA in standalone mode may never show it, which loses the gesture with no
+   *  sign that anything happened. */
   function renameBackground(slotIndex: number) {
-    const slot = bgSlots[slotIndex];
-    if (!slot?.imageId) return;
-    const value = window.prompt("给这张背景改名", slot.label);
-    const label = value?.trim().slice(0, 24);
-    if (!label || label === slot.label) return;
+    if (!bgSlots[slotIndex]?.imageId) return;
+    setRenamingSlot(slotIndex);
+  }
+
+  function commitRename(slotIndex: number, value: string) {
+    setRenamingSlot(null);
+    const label = value.trim().slice(0, 24);
+    if (!label || label === bgSlots[slotIndex]?.label) return;
     setBgSlots((current) => {
       const next = current.map((item, index) => (index === slotIndex ? { ...item, label } : item));
       store(BG_SLOTS_KEY, JSON.stringify(next));
@@ -1391,7 +1427,7 @@ export function ChatRoom() {
       cliSessions: undefined,
       lastKind: undefined,
     }));
-    if (restored) setDraft(restored);
+    if (restored) setDraftText(restored);
   }
 
   /**
@@ -1755,6 +1791,9 @@ export function ChatRoom() {
             sendKeySlotRef.current = slot;
             sendKeyFileRef.current?.click();
           }}
+          renamingSlot={renamingSlot}
+          onCommitRename={commitRename}
+          onCancelRename={() => setRenamingSlot(null)}
           onBgFit={applyBgFit}
           onBgOpacity={applyBgOpacity}
           onAvatars={applyAvatarsOn}
@@ -1789,6 +1828,17 @@ export function ChatRoom() {
           position: "relative",
           zIndex: 1,
           overscrollBehavior: "contain",
+          // Not one step sideways.
+          //
+          // overflow-y: auto forces overflow-x up from visible to auto, so the
+          // moment anything in the stream reaches past the right edge this
+          // column becomes a thing that scrolls horizontally — and once dragged
+          // it stays there, which reads as the whole conversation having been
+          // pulled aside. (A photo stack being dragged overhangs by up to half a
+          // card; that is the one.) Declaring hidden closes that axis, and what
+          // hangs over is clipped by the container.
+          overflowX: "hidden",
+          overscrollBehaviorX: "none",
           WebkitOverflowScrolling: "touch",
           touchAction: "pan-y",
           display: "flex",
@@ -2012,8 +2062,14 @@ export function ChatRoom() {
           >
             <textarea
               ref={draftRef}
-              value={draft}
-              onChange={(e) => setDraft(e.target.value)}
+              defaultValue=""
+              onInput={(e) => {
+                resizeDraft();
+                // Only when it crosses between empty and not — that is what the
+                // send key's look depends on, and nothing else re-renders here.
+                const next = e.currentTarget.value.trim().length > 0;
+                setHasDraft((cur) => (cur === next ? cur : next));
+              }}
               onKeyDown={(e) => {
                 if (e.key !== "Enter") return;
                 // Mid-composition Enter is the IME choosing a candidate, not a
@@ -2056,7 +2112,7 @@ export function ChatRoom() {
           <button
             type="button"
             onClick={busy ? stopStreaming : () => void send()}
-            disabled={!busy && !draft.trim()}
+            disabled={!busy && !hasDraft}
             aria-label={busy ? "停" : "发送"}
             style={{
               flex: "none",
@@ -2070,7 +2126,7 @@ export function ChatRoom() {
                   ? sendArt.ring === "none"
                     ? "none"
                     : `1px solid ${p.theme === "day" ? "rgba(176,64,99,.45)" : "rgba(230,205,150,.55)"}`
-                  : `1px solid ${busy || draft.trim() ? p.bubbleThemCorner : p.rule}`,
+                  : `1px solid ${busy || hasDraft ? p.bubbleThemCorner : p.rule}`,
               background:
                 sendArt?.bare && !busy
                   ? "transparent"
@@ -2081,9 +2137,9 @@ export function ChatRoom() {
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
-              cursor: busy || draft.trim() ? "pointer" : "default",
+              cursor: busy || hasDraft ? "pointer" : "default",
               position: "relative",
-              opacity: busy || draft.trim() ? 1 : (sendArt?.idleOpacity ?? 0.5),
+              opacity: busy || hasDraft ? 1 : (sendArt?.idleOpacity ?? 0.5),
             }}
           >
             {!sendArt && (
@@ -2369,6 +2425,9 @@ function BackgroundSlotToggle({
   onSelect,
   onUpload,
   onRename,
+  renaming,
+  onCommitRename,
+  onCancelRename,
 }: {
   p: Palette;
   slot: BackgroundSlot;
@@ -2376,6 +2435,9 @@ function BackgroundSlotToggle({
   onSelect: () => void;
   onUpload: () => void;
   onRename: () => void;
+  renaming: boolean;
+  onCommitRename: (value: string) => void;
+  onCancelRename: () => void;
 }) {
   const holdTimer = useRef<number | null>(null);
   const pressStart = useRef<{ x: number; y: number } | null>(null);
@@ -2406,6 +2468,36 @@ function BackgroundSlotToggle({
         overflow: "hidden",
       }}
     >
+      {renaming ? (
+        <input
+          autoFocus
+          defaultValue={slot.label}
+          maxLength={24}
+          aria-label="背景的名字"
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              onCommitRename((e.target as HTMLInputElement).value);
+            } else if (e.key === "Escape") {
+              e.preventDefault();
+              onCancelRename();
+            }
+          }}
+          onBlur={(e) => onCommitRename(e.target.value)}
+          style={{
+            flex: 1,
+            minWidth: 0,
+            padding: "5px 7px",
+            border: "none",
+            outline: "none",
+            background: "transparent",
+            color: accentHi,
+            fontSize: 10,
+            letterSpacing: 0.8,
+            fontFamily: FONT_CN,
+          }}
+        />
+      ) : (
       <button
         type="button"
         aria-pressed={selected}
@@ -2471,6 +2563,7 @@ function BackgroundSlotToggle({
       >
         {slot.label}
       </button>
+      )}
       <button
         type="button"
         onClick={onUpload}
@@ -2527,6 +2620,9 @@ function SettingsDrawer({
   sendKey,
   onSendKey,
   onPickSendKeyArt,
+  renamingSlot,
+  onCommitRename,
+  onCancelRename,
 }: {
   p: Palette;
   theme: ChatTheme;
@@ -2546,6 +2642,9 @@ function SettingsDrawer({
   sendKey: SendKeySettings;
   onSendKey: (next: SendKeySettings) => void;
   onPickSendKeyArt: (slot: "day" | "night") => void;
+  renamingSlot: number | null;
+  onCommitRename: (slotIndex: number, value: string) => void;
+  onCancelRename: () => void;
   onAvatars: (v: boolean) => void;
   onPickAvatar: (slot: "me" | "them") => void;
   onClearAvatar: (slot: "me" | "them") => void;
@@ -2676,6 +2775,9 @@ function SettingsDrawer({
             onSelect={() => onBg(backgroundSlotId(index))}
             onUpload={() => onPickBgSlot(index)}
             onRename={() => onRenameBgSlot(index)}
+            renaming={renamingSlot === index}
+            onCommitRename={(value) => onCommitRename(index, value)}
+            onCancelRename={onCancelRename}
           />
         ))}
       </div>
@@ -3055,7 +3157,18 @@ function renderEmphasis(text: string): ReactNode {
   while ((m = re.exec(text)) !== null) {
     if (m.index > last) nodes.push(text.slice(last, m.index));
     if (m[1] !== undefined) nodes.push(<strong key={k++} style={{ fontWeight: 600 }}>{m[1]}</strong>);
-    else nodes.push(<em key={k++}>{m[2]}</em>);
+    // Chinese has no italic face, so `font-style: italic` is a synthesised
+    // slant: the glyph gains no width but its ink leans right, and the last
+    // character of a run reaches out of its own cell into whatever follows —
+    // against the bubble's padding it reads as having been bitten off. A small
+    // italic correction gives that ink somewhere to go (the same trick as TeX's
+    // \/); 0.2em is about what a full-width glyph overhangs at that slant.
+    else
+      nodes.push(
+        <em key={k++} style={{ paddingInlineEnd: "0.2em", opacity: 0.85 }}>
+          {m[2]}
+        </em>,
+      );
     last = re.lastIndex;
   }
   if (last < text.length) nodes.push(text.slice(last));

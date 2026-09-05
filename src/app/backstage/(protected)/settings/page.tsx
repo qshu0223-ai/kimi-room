@@ -756,6 +756,9 @@ export default function SettingsPage() {
             step={5}
             value={Math.round(sendKey.idleOpacity * 100)}
             onChange={(e) => updateSendKey({ idleOpacity: Number(e.target.value) / 100 })}
+            // Without this the browser draws its own accent — a blue that has no
+            // business in this palette.
+            style={{ accentColor: "currentColor" }}
           />
           <span className={helpCls}>输入框空着的时候这一枚有多显眼.</span>
         </label>
