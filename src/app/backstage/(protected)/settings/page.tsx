@@ -40,6 +40,15 @@ import {
   setUserName,
 } from "@/lib/template";
 import { RoomLayoutEditor } from "@/components/backstage/RoomLayoutEditor";
+import {
+  FOYER_NOTE_DEFAULT,
+  FOYER_QUOTE_DEFAULT,
+  readFoyerPrefs,
+  readFoyerSkipCookie,
+  setFoyerSkipCookie,
+  todayISO,
+  writeFoyerPrefs,
+} from "@/lib/foyer-prefs";
 
 type Toast = { msg: string; tone: "ok" | "err" } | null;
 
@@ -85,6 +94,15 @@ export default function SettingsPage() {
   const [toast, setToast] = useState<Toast>(null);
   const [demoOn, setDemoOn] = useState(false);
   const [demoBusy, setDemoBusy] = useState(false);
+  const [foyer, setFoyer] = useState({
+    since: "",
+    quote: "",
+    note: "",
+    wxLabel: "",
+    wxLat: "",
+    wxLng: "",
+    skip: false,
+  });
 
   useEffect(() => {
     setTitle(getAppTitle());
@@ -94,7 +112,40 @@ export default function SettingsPage() {
     setMeds(loadMedButtons());
     setDemoOn(isDemoOn());
     refreshPortraits();
+    const f = readFoyerPrefs();
+    setFoyer({
+      since: f.since ?? "",
+      quote: f.quote,
+      note: f.note,
+      wxLabel: f.weather?.label ?? "",
+      wxLat: f.weather ? String(f.weather.lat) : "",
+      wxLng: f.weather ? String(f.weather.lng) : "",
+      skip: readFoyerSkipCookie(),
+    });
   }, []);
+
+  function onSaveFoyer(e: React.FormEvent) {
+    e.preventDefault();
+    const lat = Number(foyer.wxLat);
+    const lng = Number(foyer.wxLng);
+    const hasWeather =
+      foyer.wxLat.trim() !== "" &&
+      foyer.wxLng.trim() !== "" &&
+      Number.isFinite(lat) &&
+      Number.isFinite(lng);
+    if (!hasWeather && (foyer.wxLat.trim() !== "" || foyer.wxLng.trim() !== "")) {
+      flash("天气要经纬度两个都填, 且是数字", "err");
+      return;
+    }
+    writeFoyerPrefs({
+      since: foyer.since.trim() || null,
+      quote: foyer.quote,
+      note: foyer.note,
+      weather: hasWeather ? { label: foyer.wxLabel.trim(), lat, lng } : null,
+    });
+    setFoyerSkipCookie(foyer.skip);
+    flash("保存了");
+  }
 
   function addMed() {
     const label = medDraft.trim();
@@ -603,6 +654,119 @@ export default function SettingsPage() {
           })}
         </div>
       </section>
+
+      {/* ── Foyer (门厅 /) ──────────────────────────── */}
+      <form onSubmit={onSaveFoyer} className="mt-24 max-w-md mx-auto flex flex-col gap-6">
+        <h2 className={labelCls}>门厅</h2>
+        <p className={helpCls}>
+          首页那一屏 · 右下两枚印切昼夜与构图 (满窗 / 三联) · 左右划换窗换画 ·
+          都存你本地浏览器. 见{" "}
+          <a
+            href="https://github.com/marikagura/kimi-room/blob/main/docs/FOYER.md"
+            target="_blank"
+            rel="noreferrer"
+            className="underline-offset-4 hover:underline"
+          >
+            docs/FOYER.md
+          </a>
+          .
+        </p>
+
+        <label className="flex flex-col gap-2">
+          <span className={labelCls}>起算日</span>
+          <input
+            type="date"
+            value={foyer.since}
+            onChange={(e) => setFoyer((f) => ({ ...f, since: e.target.value }))}
+            className={`${inputCls} font-mono text-sm`}
+          />
+          <span className={helpCls}>
+            门厅上那个数从这天算起 · 当天是 0 · 留空 = 第一次打开门厅那天 (今天是{" "}
+            {todayISO()}).
+          </span>
+        </label>
+
+        <label className="flex flex-col gap-2">
+          <span className={labelCls}>门厅那句话</span>
+          <textarea
+            value={foyer.quote}
+            onChange={(e) => setFoyer((f) => ({ ...f, quote: e.target.value }))}
+            rows={2}
+            placeholder={FOYER_QUOTE_DEFAULT}
+            className={`${inputCls} font-serif text-sm resize-y`}
+          />
+          <span className={helpCls}>一行一行地断 · 断行就是排版, 不交给容器宽度决定.</span>
+        </label>
+
+        <label className="flex flex-col gap-2">
+          <span className={labelCls}>门口便签</span>
+          <input
+            type="text"
+            value={foyer.note}
+            onChange={(e) => setFoyer((f) => ({ ...f, note: e.target.value }))}
+            placeholder={FOYER_NOTE_DEFAULT}
+            className={`${inputCls} font-serif text-sm`}
+          />
+          <span className={helpCls}>压在 AD ALTERUM · P.S. 底下那张小纸片.</span>
+        </label>
+
+        <fieldset className="flex flex-col gap-3">
+          <legend className={labelCls}>天气</legend>
+          <p className={helpCls}>
+            走 Open-Meteo, 不要 key · 经纬度留空就整行不显示 · 城市名只是那行的标签.
+          </p>
+          <div className="grid grid-cols-3 gap-4">
+            <label className="flex flex-col gap-1">
+              <span className={helpCls}>地名</span>
+              <input
+                type="text"
+                value={foyer.wxLabel}
+                onChange={(e) => setFoyer((f) => ({ ...f, wxLabel: e.target.value }))}
+                placeholder="MINATO-KU"
+                className={`${inputCls} font-serif text-sm`}
+              />
+            </label>
+            <label className="flex flex-col gap-1">
+              <span className={helpCls}>纬度</span>
+              <input
+                type="number"
+                step="any"
+                value={foyer.wxLat}
+                onChange={(e) => setFoyer((f) => ({ ...f, wxLat: e.target.value }))}
+                placeholder="35.658"
+                className={`${inputCls} font-mono text-sm`}
+              />
+            </label>
+            <label className="flex flex-col gap-1">
+              <span className={helpCls}>经度</span>
+              <input
+                type="number"
+                step="any"
+                value={foyer.wxLng}
+                onChange={(e) => setFoyer((f) => ({ ...f, wxLng: e.target.value }))}
+                placeholder="139.751"
+                className={`${inputCls} font-mono text-sm`}
+              />
+            </label>
+          </div>
+        </fieldset>
+
+        <label className="flex items-center gap-3">
+          <input
+            type="checkbox"
+            checked={foyer.skip}
+            onChange={(e) => setFoyer((f) => ({ ...f, skip: e.target.checked }))}
+          />
+          <span className="flex flex-col gap-1">
+            <span className={labelCls}>跳过门厅</span>
+            <span className={helpCls}>勾上之后打开网址直接进 /room.</span>
+          </span>
+        </label>
+
+        <button type="submit" className={`${buttonCls} self-start`}>
+          保存门厅
+        </button>
+      </form>
 
       {/* ── Calendar meds preset ──────────────────── */}
       <section className="mt-24 max-w-md mx-auto flex flex-col gap-4">
