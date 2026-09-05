@@ -63,12 +63,22 @@ import {
   type LinkPreview,
 } from "@/lib/chat-media";
 import {
+  SEND_KEY_DEFAULTS,
+  customIdFor,
+  loadSendKeySettings,
+  resolveSendArt,
+  saveSendKeySettings,
+  type SendKeySettings,
+} from "@/lib/send-key-prefs";
+import {
   ARCVS_KEYFRAMES,
   FONT_CN,
   FONT_LATIN,
   ONUM,
   paletteFor,
-  SEND_ART,
+  SEND_ART_PRESETS,
+  SEND_KEY_PRESET_ORDER,
+  type SendKeyPreset,
   type ChatTheme,
   type Palette,
 } from "./arcvs/tokens";
@@ -381,6 +391,11 @@ export function ChatRoom() {
   const [bgId, setBgId] = useState<string>("none");
   const [bgFit, setBgFit] = useState<BgFit>("adapt");
   const [bgSlots, setBgSlots] = useState<BackgroundSlot[]>(blankBackgroundSlots);
+  const [sendKey, setSendKey] = useState<SendKeySettings>(SEND_KEY_DEFAULTS);
+  /** Object URL for a custom send key, resolved from IndexedDB like the background. */
+  const [sendKeyUrl, setSendKeyUrl] = useState<string | null>(null);
+  const sendKeyFileRef = useRef<HTMLInputElement>(null);
+  const sendKeySlotRef = useRef<"day" | "night">("day");
   const [bgOpacity, setBgOpacity] = useState(DEFAULT_BG_OPACITY);
   const [avatarsOn, setAvatarsOn] = useState(false);
   const [avatarIds, setAvatarIds] = useState<{ me?: string; them?: string }>({});
@@ -478,6 +493,7 @@ export function ChatRoom() {
       const t = localStorage.getItem(THEME_KEY);
       if (t === "day" || t === "night") setTheme(t);
       else setTheme(autoTheme());
+      setSendKey(loadSendKeySettings());
       const slots = readBackgroundSlots(localStorage.getItem(BG_SLOTS_KEY));
       const savedBg = localStorage.getItem(BG_KEY) ?? "none";
       let nextBg = "none";
@@ -750,6 +766,42 @@ export function ChatRoom() {
     [activeBgSlot?.label, bgId, ownBgUrl],
   );
 
+  // Same as the background: the IndexedDB id survives a reload, the blob URL
+  // does not, so it is remade for whichever colourway is showing.
+  const sendKeyCustomId = customIdFor(sendKey, theme);
+  useEffect(() => {
+    if (!sendKeyCustomId) {
+      setSendKeyUrl(null);
+      return;
+    }
+    let alive = true;
+    void chatImageUrl(sendKeyCustomId).then((u) => {
+      if (alive) setSendKeyUrl(u);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [sendKeyCustomId]);
+
+  /** Write the send key's settings through, and keep other tabs in step. */
+  function applySendKey(next: SendKeySettings) {
+    setSendKey(next);
+    saveSendKeySettings(next);
+  }
+
+  /** Import a picture for one colourway's send key — downscaled into IndexedDB
+   *  like a chat image, never uploaded. */
+  async function pickSendKeyArt(file: File, slot: "day" | "night") {
+    if (!file.type.startsWith("image/")) return;
+    try {
+      const img = await putChatImage(file);
+      applySendKey({ ...sendKey, [slot === "day" ? "customDay" : "customNight"]: img.id });
+      if (slot === theme) setSendKeyUrl(img.url ?? null);
+    } catch {
+      flash("发送键的图没存上");
+    }
+  }
+
   // The IndexedDB id survives reloads; the blob URL does not, so it is remade.
   useEffect(() => {
     if (!activeBgImageId) {
@@ -764,7 +816,7 @@ export function ChatRoom() {
       alive = false;
     };
   }, [activeBgImageId]);
-  const sendArt = SEND_ART[theme];
+  const sendArt = resolveSendArt(sendKey, theme, sendKeyUrl);
   const provider = useMemo(
     () => resolveProvider(pCap, codexCap),
     // llmSettings / providerTick both stand for "the pick may have changed"
@@ -1697,6 +1749,12 @@ export function ChatRoom() {
             bgFileRef.current?.click();
           }}
           onRenameBgSlot={renameBackground}
+          sendKey={sendKey}
+          onSendKey={applySendKey}
+          onPickSendKeyArt={(slot) => {
+            sendKeySlotRef.current = slot;
+            sendKeyFileRef.current?.click();
+          }}
           onBgFit={applyBgFit}
           onBgOpacity={applyBgOpacity}
           onAvatars={applyAvatarsOn}
@@ -1927,6 +1985,17 @@ export function ChatRoom() {
               e.target.value = "";
             }}
           />
+          <input
+            ref={sendKeyFileRef}
+            type="file"
+            accept="image/*"
+            hidden
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              e.target.value = "";
+              if (f) void pickSendKeyArt(f, sendKeySlotRef.current);
+            }}
+          />
 
           <div
             style={{
@@ -1946,7 +2015,17 @@ export function ChatRoom() {
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
               onKeyDown={(e) => {
-                if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+                if (e.key !== "Enter") return;
+                // Mid-composition Enter is the IME choosing a candidate, not a
+                // person finishing a sentence — never send on it.
+                if (e.nativeEvent.isComposing) return;
+                if (sendKey.enterSends) {
+                  if (e.shiftKey) return; // Shift+Enter breaks the line
+                  e.preventDefault();
+                  void send();
+                  return;
+                }
+                if (e.metaKey || e.ctrlKey) {
                   e.preventDefault();
                   void send();
                 }
@@ -2030,6 +2109,7 @@ export function ChatRoom() {
                   inset: sendArt.inset ?? -1,
                   objectFit: "contain",
                   display: "block",
+                  filter: sendArt.filter,
                 }}
               />
             ) : (
@@ -2444,6 +2524,9 @@ function SettingsDrawer({
   onCloseout,
   onFresh,
   closeoutReady,
+  sendKey,
+  onSendKey,
+  onPickSendKeyArt,
 }: {
   p: Palette;
   theme: ChatTheme;
@@ -2460,6 +2543,9 @@ function SettingsDrawer({
   onRenameBgSlot: (slotIndex: number) => void;
   onBgFit: (f: BgFit) => void;
   onBgOpacity: (value: number) => void;
+  sendKey: SendKeySettings;
+  onSendKey: (next: SendKeySettings) => void;
+  onPickSendKeyArt: (slot: "day" | "night") => void;
   onAvatars: (v: boolean) => void;
   onPickAvatar: (slot: "me" | "them") => void;
   onClearAvatar: (slot: "me" | "them") => void;
@@ -2603,6 +2689,107 @@ function SettingsDrawer({
         }}
       >
         点按切换 · 长按改名 · ↥ 换图
+      </div>
+
+      <div style={{ ...heading, marginTop: 14 }}>send key</div>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginBottom: 6 }}>
+        {SEND_KEY_PRESET_ORDER.map((key) => {
+          const art = SEND_ART_PRESETS[key][theme];
+          const on = sendKey.preset === key && !customIdFor(sendKey, theme);
+          return (
+            <button
+              key={key}
+              type="button"
+              aria-label={SEND_ART_PRESETS[key].label}
+              onClick={() =>
+                onSendKey({ ...sendKey, preset: key, customDay: null, customNight: null })
+              }
+              style={{
+                width: 38,
+                height: 38,
+                padding: 0,
+                borderRadius: "50%",
+                border: `1px solid ${on ? p.bubbleThemCorner : p.ruleSoft}`,
+                background: on
+                  ? theme === "day"
+                    ? "rgba(176,64,99,.08)"
+                    : "rgba(230,205,150,.09)"
+                  : "transparent",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                cursor: "pointer",
+                position: "relative",
+                overflow: "hidden",
+              }}
+            >
+              {art ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={art.src}
+                  alt=""
+                  style={{ position: "absolute", inset: 1, objectFit: "contain", filter: art.filter }}
+                />
+              ) : (
+                <FourPointStar color={theme === "day" ? p.roseHi : p.goldHi} size={13} />
+              )}
+            </button>
+          );
+        })}
+        <button
+          type="button"
+          aria-label="自己的图"
+          onClick={() => onPickSendKeyArt(theme)}
+          style={{
+            width: 38,
+            height: 38,
+            padding: 0,
+            borderRadius: "50%",
+            border: `1px dashed ${customIdFor(sendKey, theme) ? p.bubbleThemCorner : p.ruleSoft}`,
+            background: "transparent",
+            color: p.inkMute,
+            fontSize: 15,
+            lineHeight: 1,
+            cursor: "pointer",
+          }}
+        >
+          ↥
+        </button>
+      </div>
+      <div style={{ display: "flex", gap: 6, marginBottom: 6 }}>
+        <button
+          type="button"
+          onClick={() => onSendKey({ ...sendKey, enterSends: !sendKey.enterSends })}
+          style={{ ...chip(sendKey.enterSends), fontFamily: FONT_CN }}
+        >
+          Enter 发送
+        </button>
+        {customIdFor(sendKey, theme) && (
+          <button
+            type="button"
+            onClick={() =>
+              onSendKey({
+                ...sendKey,
+                [theme === "day" ? "customDay" : "customNight"]: null,
+              })
+            }
+            style={{ ...chip(false), fontFamily: FONT_CN }}
+          >
+            用回预设
+          </button>
+        )}
+      </div>
+      <div
+        style={{
+          margin: "0 1px 8px",
+          color: p.inkMute,
+          fontSize: 8,
+          letterSpacing: 0.5,
+          fontFamily: FONT_CN,
+        }}
+      >
+        选一枚 · ↥ 换成自己的图 · 昼夜各存各的
+        {sendKey.enterSends ? " · Shift+Enter 换行" : " · 现在是 ⌘/Ctrl+Enter 发送"}
       </div>
       {bgId !== "none" && (
         <>

@@ -41,6 +41,16 @@ import {
 } from "@/lib/template";
 import { RoomLayoutEditor } from "@/components/backstage/RoomLayoutEditor";
 import {
+  SEND_ART_PRESETS,
+  SEND_KEY_PRESET_ORDER,
+} from "@/components/chat/arcvs/tokens";
+import {
+  SEND_KEY_DEFAULTS,
+  loadSendKeySettings,
+  saveSendKeySettings,
+  type SendKeySettings,
+} from "@/lib/send-key-prefs";
+import {
   FOYER_NOTE_DEFAULT,
   FOYER_QUOTE_DEFAULT,
   readFoyerPrefs,
@@ -94,6 +104,7 @@ export default function SettingsPage() {
   const [toast, setToast] = useState<Toast>(null);
   const [demoOn, setDemoOn] = useState(false);
   const [demoBusy, setDemoBusy] = useState(false);
+  const [sendKey, setSendKeyState] = useState<SendKeySettings>(SEND_KEY_DEFAULTS);
   const [foyer, setFoyer] = useState({
     since: "",
     quote: "",
@@ -112,6 +123,7 @@ export default function SettingsPage() {
     setMeds(loadMedButtons());
     setDemoOn(isDemoOn());
     refreshPortraits();
+    setSendKeyState(loadSendKeySettings());
     const f = readFoyerPrefs();
     setFoyer({
       since: f.since ?? "",
@@ -123,6 +135,12 @@ export default function SettingsPage() {
       skip: readFoyerSkipCookie(),
     });
   }, []);
+
+  function updateSendKey(patch: Partial<SendKeySettings>) {
+    const next = { ...sendKey, ...patch };
+    setSendKeyState(next);
+    saveSendKeySettings(next);
+  }
 
   function onSaveFoyer(e: React.FormEvent) {
     e.preventDefault();
@@ -653,6 +671,94 @@ export default function SettingsPage() {
             );
           })}
         </div>
+      </section>
+
+      {/* ── Send key ─────────────────────────────────── */}
+      <section className="mt-24 max-w-md mx-auto flex flex-col gap-4">
+        <h2 className={labelCls}>发送键</h2>
+        <p className={helpCls}>
+          对话页输入框右边那一枚 · 昼夜各一张图 · 改完即时生效, 不用保存 ·
+          对话页的设置抽屉里也有同一排.
+        </p>
+
+        <div className="flex flex-col gap-3">
+          {(["day", "night"] as const).map((mode) => (
+            <div key={mode} className="flex items-center gap-3">
+              <span className={`${helpCls} w-8 shrink-0`}>{mode === "day" ? "昼" : "夜"}</span>
+              <div className="flex flex-wrap gap-2">
+                {SEND_KEY_PRESET_ORDER.map((key) => {
+                  const art = SEND_ART_PRESETS[key][mode];
+                  const on = sendKey.preset === key;
+                  return (
+                    <button
+                      key={key}
+                      type="button"
+                      title={SEND_ART_PRESETS[key].label}
+                      aria-label={`${mode === "day" ? "昼" : "夜"} · ${SEND_ART_PRESETS[key].label}`}
+                      onClick={() =>
+                        updateSendKey({ preset: key, customDay: null, customNight: null })
+                      }
+                      className="w-11 h-11 rounded-full border flex items-center justify-center relative overflow-hidden"
+                      style={{
+                        borderColor: on ? "currentColor" : "rgba(128,128,128,.35)",
+                        background: mode === "day" ? "#FBF6EE" : "#140E09",
+                      }}
+                    >
+                      {art ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={art.src}
+                          alt=""
+                          className="absolute inset-0.5 object-contain"
+                          style={{ filter: art.filter }}
+                        />
+                      ) : (
+                        <span
+                          className="text-[10px]"
+                          style={{ color: mode === "day" ? "#B04063" : "#E6CD96" }}
+                        >
+                          ✦
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
+        <p className={helpCls}>
+          想用自己的图: 在对话页的设置抽屉里点那枚虚线圈 ↥ 上传, 昼夜各存各的 ·
+          图存在你自己浏览器里, 不上传.
+        </p>
+
+        <label className="flex items-center gap-3 mt-2">
+          <input
+            type="checkbox"
+            checked={sendKey.enterSends}
+            onChange={(e) => updateSendKey({ enterSends: e.target.checked })}
+          />
+          <span className="flex flex-col gap-1">
+            <span className={labelCls}>Enter 发送</span>
+            <span className={helpCls}>
+              勾上: Enter 发送, Shift+Enter 换行 · 不勾: Enter 换行, ⌘/Ctrl+Enter 发送 ·
+              中文输入法选字时的 Enter 两种都不发.
+            </span>
+          </span>
+        </label>
+
+        <label className="flex flex-col gap-2 mt-2">
+          <span className={labelCls}>没打字时的深浅 · {Math.round(sendKey.idleOpacity * 100)}%</span>
+          <input
+            type="range"
+            min={20}
+            max={100}
+            step={5}
+            value={Math.round(sendKey.idleOpacity * 100)}
+            onChange={(e) => updateSendKey({ idleOpacity: Number(e.target.value) / 100 })}
+          />
+          <span className={helpCls}>输入框空着的时候这一枚有多显眼.</span>
+        </label>
       </section>
 
       {/* ── Foyer (门厅 /) ──────────────────────────── */}

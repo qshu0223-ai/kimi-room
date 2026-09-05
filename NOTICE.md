@@ -22,6 +22,28 @@ If you are the original creator of any image in this set and want it removed, op
 
 ---
 
+## `public/images/chat/send/` — the send key's artwork (7 files)
+
+`star-day`, `star-night`, `crest-night`, `moon`, `heart`, `paw`, `bow` — small
+glass-and-jelly ornaments used as the picture on the send key.
+
+Collected from public web image sources during canon development. The originals
+carry no author or licence metadata and no creator could be identified for any of
+them; they appear to be stock or generated 3D renders of a kind that circulates
+widely without attribution. Nothing here is claimed as original work.
+
+Bundled as default visual options for non-commercial personal use, on the same
+leaning as `public/images/mood/`. A fork deploying commercially should replace
+them, which is a matter of dropping files into that folder and editing
+`SEND_ART_PRESETS` in `src/components/chat/arcvs/tokens.ts` — or of choosing the
+`drawn mark` preset, which uses no picture at all and is drawn in the palette's
+own ink.
+
+If you made one of these and want it removed, open an issue and it will be gone
+the same day.
+
+---
+
 ## `public/images/foyer/` — the foyer's paintings and windows (31 files)
 
 Three groups, with three different copyright situations. Read this before

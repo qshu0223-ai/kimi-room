@@ -99,6 +99,7 @@ deleted. Hand this section, plus what you want changed, to your AI:
 | **Atlas** (addon · travel log) | one static demo trip · iron-tracery window opens to reveal the image | wire your own source (DB / MDX / API), set `imageUrl` to a real image; or tuck it away in /settings |
 | **Ephemera** (addon · keepsake papers) | 21 "push-as-paper" genres · one neutral fictional demo | wire your own papers (core / DB / API) + VAPID lock-screen push (see [docs/EPHEMERA.en.md](docs/EPHEMERA.en.md)); or tuck it away in /settings |
 | **Foyer** (`/`) | an opening screen drawn four ways · start date / line / note / weather filled in settings | hang your own paintings and windows (two registries in `src/lib/foyer.ts`); or tick "skip the foyer" in settings |
+| **Send key** | seven presets · one picture per colourway · Enter behaviour switchable | upload your own (kept locally); or pick "drawn mark" and use no picture at all |
 | **Backstage** | fixed /ops page | add any ops panel you want |
 | **All manual inputs** | hand-filled | all replaceable with automation. Candles via app_open, sleep via sensors, finance via bank API |
 | **Character / RP features** | character config in /settings | deletable wholesale. Tell your AI "remove all character and RP features" |

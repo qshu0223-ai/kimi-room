@@ -126,14 +126,17 @@ export function paletteFor(theme: ChatTheme): Palette {
 }
 
 /**
- * Artwork for the send key, per colourway. Clear this to `{}` and the key falls
- * back to the drawn star mark — no other change is needed. A deployment that
- * wants its own medallion drops two round PNGs with transparent corners into
- * public/images/chat/ and names them here.
+ * The send key's artwork.
+ *
+ * One entry per preset; a preset carries a picture for each colourway, or none
+ * at all, in which case the key falls back to the drawn star mark. Whoever
+ * deploys this picks a preset in settings, or drops their own two pictures in
+ * and the key uses those instead — see src/lib/send-key-prefs.ts.
  *
  * `ring` says whether the key keeps a hairline around the picture. Art with its
- * own ground reads better bare; art that fades at the edge needs the line to
- * stay a button.
+ * own ground reads better bare; art that fades at its edge needs the line to go
+ * on reading as a button. `filter` is there for a single picture doing duty in
+ * both colourways — a touch of brightness so it does not sink into the dark.
  */
 export type SendArt = {
   src: string;
@@ -141,17 +144,61 @@ export type SendArt = {
   inset?: number;
   bare?: boolean;
   idleOpacity?: number;
+  filter?: string;
 };
-export const SEND_ART: { day?: SendArt; night?: SendArt } = {
-  night: { src: "/images/chat/send-night.png", ring: "none", idleOpacity: 1 },
-  day: {
-    src: "/images/chat/1c84dc6ea229a1c8405548ecefba1376.png",
-    ring: "none",
-    inset: 0,
-    bare: true,
-    idleOpacity: 1,
+
+export type SendKeyPreset =
+  | "default"
+  | "mark"
+  | "star"
+  | "moon"
+  | "heart"
+  | "paw"
+  | "bow";
+
+const GLASS: Pick<SendArt, "ring" | "bare" | "inset" | "idleOpacity"> = {
+  ring: "none",
+  bare: true,
+  inset: 0,
+  idleOpacity: 1,
+};
+
+/** A picture standing in for both day and night, lifted a little at night. */
+function both(src: string): { day: SendArt; night: SendArt } {
+  return {
+    day: { src, ...GLASS },
+    night: { src, ...GLASS, filter: "brightness(1.06)" },
+  };
+}
+
+export const SEND_ART_PRESETS: Record<
+  SendKeyPreset,
+  { label: string; day?: SendArt; night?: SendArt }
+> = {
+  // What the key has looked like since v0.44: a glass star by day, a crest at
+  // night. Kept as the default so an existing install does not change under
+  // anyone.
+  default: {
+    label: "star & crest",
+    day: { src: "/images/chat/send/star-day.webp", ...GLASS },
+    night: { src: "/images/chat/send/crest-night.webp", ...GLASS },
   },
+  // No picture at all — the drawn four-point star, in the palette's own ink.
+  mark: { label: "drawn mark" },
+  star: {
+    label: "glass star",
+    day: { src: "/images/chat/send/star-day.webp", ...GLASS },
+    night: { src: "/images/chat/send/star-night.webp", ...GLASS },
+  },
+  moon: { label: "glass moon", ...both("/images/chat/send/moon.webp") },
+  heart: { label: "glass heart", ...both("/images/chat/send/heart.webp") },
+  paw: { label: "paw", ...both("/images/chat/send/paw.webp") },
+  bow: { label: "glass bow", ...both("/images/chat/send/bow.webp") },
 };
+
+export const SEND_KEY_PRESET_ORDER: SendKeyPreset[] = [
+  "default", "star", "moon", "heart", "paw", "bow", "mark",
+];
 
 /** Latin small caps labels. Never used for Chinese — see FONT_CN. */
 export const FONT_LATIN = 'var(--font-serif)';
