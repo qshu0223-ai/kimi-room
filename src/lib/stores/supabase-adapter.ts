@@ -43,6 +43,8 @@ import type {
   StoreContract,
   StoreEntry,
   TrackEntry,
+  VirtualOrderEntry,
+  WalletTransactionEntry,
 } from "./types";
 
 function fromSb(r: SbRow): StoreRow {
@@ -162,6 +164,8 @@ export const supabaseAdapter: AdapterBundle = {
   concept: makeStore<ConceptEntry>("concept"),
   memo: makeStore<MemoEntry>("memo"),
   calendar: makeStore<CalendarEvent>("calendar"),
+  walletTransaction: makeStore<WalletTransactionEntry>("walletTransaction"),
+  virtualOrder: makeStore<VirtualOrderEntry>("virtualOrder"),
   memory: makeStore<MemoryEntry>("memory"),
   chat: makeStore<ChatEntry>("chat"),
   track: makeStore<TrackEntry>("track"),
