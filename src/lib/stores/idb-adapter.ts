@@ -33,6 +33,8 @@ import type {
   StoreEntry,
   KeepsakeEntry,
   TrackEntry,
+  VirtualOrderEntry,
+  WalletTransactionEntry,
 } from "./types";
 
 function applyFilter<T extends StoreEntry>(
@@ -135,6 +137,8 @@ export const idbAdapter: AdapterBundle = {
   concept: makeStore<ConceptEntry>("concept"),
   memo: makeStore<MemoEntry>("memo"),
   calendar: makeStore<CalendarEvent>("calendar"),
+  walletTransaction: makeStore<WalletTransactionEntry>("walletTransaction"),
+  virtualOrder: makeStore<VirtualOrderEntry>("virtualOrder"),
   memory: makeStore<MemoryEntry>("memory"),
   chat: makeStore<ChatEntry>("chat"),
   track: makeStore<TrackEntry>("track"),
