@@ -34,6 +34,7 @@ export const ROOM_BLOCKS: RoomBlock[] = [
   { id: "calendar", href: "/room/calendar", name: "Calendar", sub: "& WELLBEING", defaultSlot: "tile" },
   { id: "memory-review", href: "/room/memory-review", name: "Memory", sub: "& REVIEW", defaultSlot: "tile" },
   { id: "disc", href: "/room/disc", name: "Disc", sub: "& MUSIC", defaultSlot: "tile" },
+  { id: "collection", href: "/room/collection", name: "Collection", sub: "& SHOPPING", defaultSlot: "link" },
   { id: "atlas", href: "/room/atlas", name: "Atlas", sub: "& PASSAGE", defaultSlot: "link" },
   { id: "graph", href: "/room/graph", name: "Graph", sub: "& CONSTELLATION", defaultSlot: "link" },
   { id: "ephemera", href: "/room/ephemera", name: "Ephemera", sub: "& OCCASIONS", defaultSlot: "link" },
