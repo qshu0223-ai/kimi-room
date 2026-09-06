@@ -22,6 +22,8 @@ import type {
   StoreContract,
   StoreEntry,
   TrackEntry,
+  VirtualOrderEntry,
+  WalletTransactionEntry,
 } from "./types";
 
 async function call<T>(
@@ -71,6 +73,8 @@ export const prismaAdapter: AdapterBundle = {
   concept: makeStore<ConceptEntry>("concept"),
   memo: makeStore<MemoEntry>("memo"),
   calendar: makeStore<CalendarEvent>("calendar"),
+  walletTransaction: makeStore<WalletTransactionEntry>("walletTransaction"),
+  virtualOrder: makeStore<VirtualOrderEntry>("virtualOrder"),
   memory: makeStore<MemoryEntry>("memory"),
   chat: makeStore<ChatEntry>("chat"),
   track: makeStore<TrackEntry>("track"),
