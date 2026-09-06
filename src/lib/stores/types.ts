@@ -1,4 +1,4 @@
-// V2 Store interfaces · 11 structured store + blob · 抽象 backend (IDB / Supabase / Prisma / core).
+// V2 Store interfaces · structured stores + blob · 抽象 backend (IDB / Supabase / Prisma / core).
 //
 // 设计原则:
 // - 每 store entry 含 `id` (uuid) + `createdAt` + `updatedAt` (ISO timestamp)
@@ -76,6 +76,33 @@ export type CalendarEvent = StoreEntry & {
   location?: string;
   amount?: number;            // optional · 联动 finance aggregate
   financeCategory?: string;   // user-defined slot id (e.g. "food" / "coffee")
+};
+
+// ── Virtual shopping · wallet ledger + completed orders/collection
+// amountCents is signed: income > 0, purchase < 0. Balance is always derived from
+// the ledger rather than stored separately, so allowance/red-packet credits can
+// reuse the same path later without synchronising a second balance field.
+export type WalletTransactionEntry = StoreEntry & {
+  amountCents: number;
+  kind: "salary" | "extra_income" | "allowance" | "purchase" | "adjustment";
+  title: string;
+  note?: string;
+  sourceKey?: string;         // idempotency key, e.g. salary:2026-09 / redpacket:<id>
+  orderId?: string;
+};
+
+export type VirtualOrderEntry = StoreEntry & {
+  orderNo: string;
+  productName: string;
+  priceCents: number;
+  category: string;
+  image?: string;             // dataURL or public image URL
+  sourceUrl?: string;
+  spec?: string;
+  note?: string;
+  paidAt: ISODate;
+  status: "paid" | "refunded";
+  walletTransactionId?: string;
 };
 
 // ── Module V · Memory (world book / lorebook / 长期 memory)
@@ -178,6 +205,8 @@ export type AdapterBundle = {
   concept: StoreContract<ConceptEntry>;
   memo: StoreContract<MemoEntry>;
   calendar: StoreContract<CalendarEvent>;
+  walletTransaction: StoreContract<WalletTransactionEntry>;
+  virtualOrder: StoreContract<VirtualOrderEntry>;
   memory: StoreContract<MemoryEntry>;
   chat: StoreContract<ChatEntry>;
   track: StoreContract<TrackEntry>;
