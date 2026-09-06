@@ -7,7 +7,7 @@
 // adapter 用户 都走 IDB cache.
 
 const DB_NAME = "kimi";
-const DB_VERSION = 2;
+const DB_VERSION = 3;
 
 export const STORE_NAMES = [
   "keepsake",
@@ -16,6 +16,8 @@ export const STORE_NAMES = [
   "concept",
   "memo",
   "calendar",
+  "walletTransaction",
+  "virtualOrder",
   "memory",
   "chat",
   "track",
