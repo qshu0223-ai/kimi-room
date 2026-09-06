@@ -47,6 +47,8 @@ export const bookStore = () => getAdapter().book;
 export const conceptStore = () => getAdapter().concept;
 export const memoStore = () => getAdapter().memo;
 export const calendarStore = () => getAdapter().calendar;
+export const walletTransactionStore = () => getAdapter().walletTransaction;
+export const virtualOrderStore = () => getAdapter().virtualOrder;
 export const memoryStore = () => getAdapter().memory;
 export const chatStore = () => getAdapter().chat;
 export const trackStore = () => getAdapter().track;
@@ -71,4 +73,6 @@ export type {
   StoreEntry,
   KeepsakeEntry,
   TrackEntry,
+  VirtualOrderEntry,
+  WalletTransactionEntry,
 } from "./types";
